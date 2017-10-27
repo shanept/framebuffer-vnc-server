@@ -35,7 +35,7 @@
 
 /* libvncserver */
 #include "rfb/rfb.h"
-//#include "rfb/keysym.h"
+#include "rfb/keysym.h"
 
 /*****************************************************************************/
 //#define LOG_FPS
@@ -44,8 +44,12 @@
 #define SAMPLES_PER_PIXEL   2
 
 static char fb_device[256] = "/dev/fb0";
+static char kbd_device[256] = "/dev/input/event2";
+static char mouse_device[256] = "/dev/input/event5";
 static struct fb_var_screeninfo scrinfo;
 static int fbfd = -1;
+static int kbdfd = -1;
+static int mousefd = -1;
 static unsigned short int *fbmmap = MAP_FAILED;
 static unsigned short int *vncbuf;
 static unsigned short int *fbbuf;
@@ -54,6 +58,8 @@ static int vnc_port = 5900;
 static rfbScreenInfoPtr server;
 static size_t bytespp;
 
+static int xmin, xmax;
+static int ymin, ymax;
 
 /* No idea, just copied from fbvncserver as part of the frame differerencing
  * algorithm.  I will probably be later rewriting all of this. */
@@ -69,6 +75,11 @@ static struct varblock_t
     int rfb_xres;
     int rfb_maxy;
 } varblock;
+
+/*****************************************************************************/
+
+static void keyevent(rfbBool down, rfbKeySym key, rfbClientPtr cl);
+static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl);
 
 /*****************************************************************************/
 
@@ -97,6 +108,7 @@ static void init_fb(void)
             (int)scrinfo.xres_virtual, (int)scrinfo.yres_virtual,
             (int)scrinfo.xoffset, (int)scrinfo.yoffset,
             (int)scrinfo.bits_per_pixel);
+
     fprintf(stderr, "offset:length red=%d:%d green=%d:%d blue=%d:%d \n",
             (int)scrinfo.red.offset, (int)scrinfo.red.length,
             (int)scrinfo.green.offset, (int)scrinfo.green.length,
@@ -117,6 +129,57 @@ static void cleanup_fb(void)
     if(fbfd != -1)
     {
         close(fbfd);
+    }
+}
+
+static void init_kbd()
+{
+    if((kbdfd = open(kbd_device, O_RDWR)) == -1)
+    {
+        fprintf(stderr, "cannot open kbd device %s\n", kbd_device);
+        exit(EXIT_FAILURE);
+    }
+}
+
+static void cleanup_kbd()
+{
+    if(kbdfd != -1)
+    {
+        close(kbdfd);
+    }
+}
+
+static void init_mouse()
+{
+    struct input_absinfo info;
+
+    if((mousefd = open(mouse_device, O_RDWR)) == -1)
+    {
+        fprintf(stderr, "cannot open mouse device %s\n", mouse_device);
+        exit(EXIT_FAILURE);
+    }
+
+    // Get the range of X and Y
+    if(ioctl(mousefd, EVIOCGABS(ABS_X), &info)) {
+        fprintf(stderr, "cannot get ABS_X info, %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    xmin = info.minimum;
+    xmax = info.maximum;
+
+    if(ioctl(mousefd, EVIOCGABS(ABS_Y), &info)) {
+        fprintf(stderr, "cannot get ABS_Y info, %s\n", strerror(errno));
+        exit(EXIT_FAILURE);
+    }
+    ymin = info.minimum;
+    ymax = info.maximum;
+}
+
+static void cleanup_mouse()
+{
+    if(mousefd != -1)
+    {
+        close(mousefd);
     }
 }
 
@@ -146,8 +209,8 @@ static void init_fb_server(int argc, char **argv)
     server->httpDir = NULL;
     server->port = vnc_port;
 
-    //	server->kbdAddEvent = keyevent;
-    //	server->ptrAddEvent = ptrevent;
+    server->kbdAddEvent = keyevent;
+    server->ptrAddEvent = ptrevent;
 
     rfbInitServer(server);
 
@@ -161,6 +224,176 @@ static void init_fb_server(int argc, char **argv)
     varblock.rfb_xres = scrinfo.yres;
     varblock.rfb_maxy = scrinfo.xres - 1;
 }
+
+/*****************************************************************************/
+
+void injectKeyEvent(uint16_t code, uint16_t value)
+{
+    struct input_event ev;
+
+    memset(&ev, 0, sizeof(ev));
+    gettimeofday(&ev.time, 0);
+
+    ev.type  = EV_KEY;
+    ev.code  = code;
+    ev.value = value;
+
+    if(write(kbdfd, &ev, sizeof(ev)) < 0)
+    {
+        fprintf(stderr, "write event failed, %s\n", strerror(errno));
+    }
+
+    fprintf(stderr, "injectKey (%d, %d)\n", code, value);
+}
+
+static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
+{
+    int scancode = 0;
+    int code = (int) key;
+
+    if (code >= '0' && code <= '9') {
+        scancode = (code & 0xF) - 1;
+        if (scancode < 0) scancode += 10;
+        scancode += KEY_1;
+    } else if (code >= 0xFF50 && code <= 0xFF58) {
+        static const uint16_t map[] =
+            {   KEY_HOME, KEY_LEFT, KEY_UP, KEY_RIGHT,
+                KEY_DOWN, 0, 0, KEY_END, 0 };
+        scancode = map[code & 0xF];
+    } else if (code >= 0xFFE1 && code <= 0xFFEE) {
+        static const uint16_t map[] =
+            {   KEY_LEFTSHIFT, KEY_LEFTSHIFT,
+                KEY_COMPOSE,   KEY_COMPOSE,
+                KEY_LEFTSHIFT, KEY_LEFTSHIFT,
+                0, 0,
+                KEY_LEFTALT,   KEY_RIGHTALT,
+                0, 0, 0, 0 };
+        scancode = map[code & 0xF];
+    } else if ((code >= 'A' && code <= 'Z') || (code >= 'a' && code <= 'z')) {
+        static const uint16_t map[] = {
+                KEY_A, KEY_B, KEY_C, KEY_D, KEY_E,
+                KEY_F, KEY_G, KEY_H, KEY_I, KEY_J,
+                KEY_K, KEY_L, KEY_M, KEY_N, KEY_O,
+                KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T,
+                KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z };
+        scancode = map[(code & 0x5F) - 'A'];
+    } else {
+        switch (code) {
+//          case 0x0003: scancode = KEY_CENTER;    break;
+            case 0x0020: scancode = KEY_SPACE;     break;
+            case 0x002C: scancode = KEY_COMMA;     break;
+            case 0x003C: scancode = KEY_COMMA;     break;
+            case 0x002E: scancode = KEY_DOT;       break;
+            case 0x003E: scancode = KEY_DOT;       break;
+            case 0x002F: scancode = KEY_SLASH;     break;
+            case 0x003F: scancode = KEY_SLASH;     break;
+            case 0x0032: scancode = KEY_EMAIL;     break;
+            case 0x0040: scancode = KEY_EMAIL;     break;
+            case 0xFF08: scancode = KEY_BACKSPACE; break;
+            case 0xFF1B: scancode = KEY_BACK;      break;
+            case 0xFF09: scancode = KEY_TAB;       break;
+            case 0xFF0D: scancode = KEY_ENTER;     break;
+//          case 0x002A: scancode = KEY_STAR;      break;
+            case 0xFFBE: scancode = KEY_F1;        break; // F1
+            case 0xFFBF: scancode = KEY_F2;        break; // F2
+            case 0xFFC0: scancode = KEY_F3;        break; // F3
+            case 0xFFC5: scancode = KEY_F4;        break; // F8
+            case 0xFFC8: rfbShutdownServer(cl->screen, TRUE); break; // F11
+        }
+    }
+
+    return scancode;
+}
+
+static void keyevent(rfbBool down, rfbKeySym key, rfbClientPtr cl)
+{
+    int scancode;
+
+    fprintf(stderr, "Got keysym: %04x (down=%d)\n", (unsigned int) key, (int) down);
+
+    if ((scancode = keysym2scancode(down, key, cl)))
+    {
+         injectKeyEvent(scancode, down);
+    }
+}
+
+void injectMouseEvent(int down, int x, int y)
+{
+    struct input_event ev;
+
+    // Calculate the final x and y
+    // Fake touch screen always reports zero
+    if (xmin != 0 && xmax != 0 && ymin != 0 && ymax != 0)
+    {
+        x = xmin + (x * (xmax - xmin)) / (scrinfo.xres);
+        y = ymin + (y * (ymax - ymin)) / (scrinfo.yres);
+    }
+
+    memset(&ev, 0, sizeof(ev));
+
+    // Then send a BTN_TOUCH (required for synchronization)
+    gettimeofday(&ev.time, 0);
+    ev.type  = EV_KEY;
+    ev.code  = BTN_TOUCH;
+    ev.value = down;
+    if(write(mousefd, &ev, sizeof(ev)) < 0)
+    {
+        fprintf(stderr, "write event failed, %s\n", strerror(errno));
+    }
+
+    // Then send the X
+    gettimeofday(&ev.time, 0);
+    ev.type  = EV_ABS;
+    ev.code  = ABS_X;
+    ev.value = x;
+    if(write(mousefd, &ev, sizeof(ev)) < 0)
+    {
+        fprintf(stderr, "write event failed, %s\n", strerror(errno));
+    }
+
+    // Then send the Y
+    gettimeofday(&ev.time, 0);
+    ev.type  = EV_ABS;
+    ev.code  = ABS_Y;
+    ev.value = y;
+    if(write(mousefd, &ev, sizeof(ev)) < 0)
+    {
+        printf("write event failed, %s\n", strerror(errno));
+    }
+
+    // Finally send the SYN
+    gettimeofday(&ev.time, 0);
+    ev.type  = EV_SYN;
+    ev.code  = 0;
+    ev.value = 0;
+    if(write(mousefd, &ev, sizeof(ev)) < 0)
+    {
+        fprintf(stderr, "write event failed, %s\n", strerror(errno));
+    }
+
+    fprintf(stderr, "injectPtrEvent (x=%d, y=%d, down=%d)\n", x, y, down);
+}
+
+static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
+{
+        /* Indicates either pointer movement or a pointer button press or release. The pinter is
+now at (x-position, y-position), and the current state of buttons 1 to 8 are represented
+by bits 0 to 7 of button-mask respectively, 0 meaning up, 1 meaning down (pressed).
+On a conventional mouse, buttons 1, 2 and 3 correspond to the left, middle and right
+buttons on the mouse. On a wheel mouse, each step of the wheel upwards is represented
+by a press and release of button 4, and each step downwards is represented by
+a press and release of button 5.
+  From: http://www.vislab.usyd.edu.au/blogs/index.php/2009/05/22/an-headerless-indexed-protocol-for-input-1?blog=61 */
+
+        //fprintf(stderr, "Got ptrevent: %04x (x=%d, y=%d)\n", buttonMask, x, y);
+        if(buttonMask & 1) {
+            // Simulate left mouse event
+            injectMouseEvent(1, x, y);
+            injectMouseEvent(0, x, y);
+        }
+}
+
+/*****************************************************************************/
 
 // sec
 #define LOG_TIME    5
@@ -177,7 +410,6 @@ int timeToLogFPS() {
     return elapsed > LOG_TIME;
 }
 
-/*****************************************************************************/
 //#define COLOR_MASK  0x1f001f
 #define COLOR_MASK  (((1 << BITS_PER_SAMPLE) << 1) - 1)
 #define PIXEL_FB_TO_RFB(p,r_offset,g_offset,b_offset) ((p>>r_offset)&COLOR_MASK) | (((p>>g_offset)&COLOR_MASK)<<BITS_PER_SAMPLE) | (((p>>b_offset)&COLOR_MASK)<<(2*BITS_PER_SAMPLE))
@@ -269,9 +501,11 @@ static void update_screen(void)
 
 void print_usage(char **argv)
 {
-    fprintf(stderr, "%s [-f device] [-p port] [-h]\n"
+    fprintf(stderr, "%s [-f device] [-k device] [-m device] [-p port] [-h]\n"
                     "-p port: VNC port, default is 5900\n"
                     "-f device: framebuffer device node, default is /dev/fb0\n"
+                    "-k device: keyboard device node, default is /dev/input/event2\n"
+                    "-m device: mouse device node, default is /dev/input/event5\n"
                     "-h : print this help\n"
             , *argv);
 }
@@ -295,6 +529,14 @@ int main(int argc, char **argv)
                     i++;
                     strcpy(fb_device, argv[i]);
                     break;
+                case 'k':
+                    i++;
+                    strcpy(kbd_device, argv[i]);
+                    break;
+                case 'm':
+                    i++;
+                    strcpy(mouse_device, argv[i]);
+                    break;
                 case 'p':
                     i++;
                     vnc_port = atoi(argv[i]);
@@ -307,6 +549,10 @@ int main(int argc, char **argv)
 
     fprintf(stderr, "Initializing framebuffer device %s...\n", fb_device);
     init_fb();
+    fprintf(stderr, "Initializing keyboard device %s...\n", kbd_device);
+    init_kbd();
+    fprintf(stderr, "Initializing mouse device %s...\n", mouse_device);
+    init_mouse();
 
     fprintf(stderr, "Initializing VNC server:\n");
     fprintf(stderr, "	width:  %d\n", (int)scrinfo.xres);
@@ -327,4 +573,6 @@ int main(int argc, char **argv)
 
     fprintf(stderr, "Cleaning up...\n");
     cleanup_fb();
+    cleanup_kbd();
+    cleanup_mouse();
 }
