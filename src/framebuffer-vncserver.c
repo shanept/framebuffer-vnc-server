@@ -45,7 +45,7 @@
 
 static char fb_device[256] = "/dev/fb0";
 static char kbd_device[256] = "/dev/input/event2";
-static char mouse_device[256] = "/dev/input/event5";
+static char mouse_device[256] = "/dev/input/event3";
 static struct fb_var_screeninfo scrinfo;
 static int fbfd = -1;
 static int kbdfd = -1;
@@ -173,6 +173,11 @@ static void init_mouse()
     }
     ymin = info.minimum;
     ymax = info.maximum;
+
+    fprintf(stderr, "xmin=%d, xmax=%d, ymin=%d, ymax=%d\n",
+            (int) xmin, (int) xmax,
+            (int) ymin, (int) ymax
+            );
 }
 
 static void cleanup_mouse()
@@ -505,7 +510,7 @@ void print_usage(char **argv)
                     "-p port: VNC port, default is 5900\n"
                     "-f device: framebuffer device node, default is /dev/fb0\n"
                     "-k device: keyboard device node, default is /dev/input/event2\n"
-                    "-m device: mouse device node, default is /dev/input/event5\n"
+                    "-m device: mouse device node, default is /dev/input/event3\n"
                     "-h : print this help\n"
             , *argv);
 }
