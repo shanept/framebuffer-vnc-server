@@ -40,12 +40,19 @@
 /*****************************************************************************/
 //#define LOG_FPS
 
+#if 0  // 24-bit/32-bit
+#define BITS_PER_SAMPLE     8
+#define SAMPLES_PER_PIXEL   3
+#else  // 16-bit
 #define BITS_PER_SAMPLE     5
 #define SAMPLES_PER_PIXEL   2
+#endif
 
-static char fb_device[256] = "/dev/fb0";
-static char kbd_device[256] = "/dev/input/event2";
-static char mouse_device[256] = "/dev/input/event3";
+int VERBOSITY = 1;
+
+static char fb_device[PATH_MAX] = "/dev/fb0";
+static char kbd_device[PATH_MAX] = "/dev/input/event2";
+static char mouse_device[PATH_MAX] = "/dev/input/event3";
 static struct fb_var_screeninfo scrinfo;
 static int fbfd = -1;
 static int kbdfd = -1;
@@ -61,17 +68,21 @@ static size_t bytespp;
 static int xmin, xmax;
 static int ymin, ymax;
 
-/* No idea, just copied from fbvncserver as part of the frame differerencing
- * algorithm.  I will probably be later rewriting all of this. */
+#define LOG1(fmt, ...) \
+    if (VERBOSITY > 0) fprintf(stderr, fmt, ## __VA_ARGS__)
+
+#define LOG2(fmt, ...) \
+    if (VERBOSITY > 1) fprintf(stderr, fmt, ## __VA_ARGS__)
+
 static struct varblock_t
 {
-    int min_i;
-    int min_j;
-    int max_i;
-    int max_j;
     int r_offset;
     int g_offset;
     int b_offset;
+    int min_x;
+    int min_y;
+    int max_x;
+    int max_y;
     int rfb_xres;
     int rfb_maxy;
 } varblock;
@@ -90,26 +101,26 @@ static void init_fb(void)
 
     if ((fbfd = open(fb_device, O_RDONLY)) == -1)
     {
-        fprintf(stderr, "cannot open fb device %s\n", fb_device);
+        LOG1("Error: Can not open framebuffer device \"%s\".\n", fb_device);
         exit(EXIT_FAILURE);
     }
 
     if (ioctl(fbfd, FBIOGET_VSCREENINFO, &scrinfo) != 0)
     {
-        fprintf(stderr, "ioctl error\n");
+        LOG1("Error: ioctl call failed.\n");
         exit(EXIT_FAILURE);
     }
 
     pixels = scrinfo.xres * scrinfo.yres;
     bytespp = scrinfo.bits_per_pixel / 8;
 
-    fprintf(stderr, "xres=%d, yres=%d, xresv=%d, yresv=%d, xoffs=%d, yoffs=%d, bpp=%d\n",
+    LOG2("xres=%d, yres=%d, xresv=%d, yresv=%d, xoffs=%d, yoffs=%d, bpp=%d\n",
             (int)scrinfo.xres, (int)scrinfo.yres,
             (int)scrinfo.xres_virtual, (int)scrinfo.yres_virtual,
             (int)scrinfo.xoffset, (int)scrinfo.yoffset,
             (int)scrinfo.bits_per_pixel);
 
-    fprintf(stderr, "offset:length red=%d:%d green=%d:%d blue=%d:%d \n",
+    LOG2("offset:length red=%d:%d green=%d:%d blue=%d:%d \n",
             (int)scrinfo.red.offset, (int)scrinfo.red.length,
             (int)scrinfo.green.offset, (int)scrinfo.green.length,
             (int)scrinfo.blue.offset, (int)scrinfo.blue.length
@@ -119,7 +130,7 @@ static void init_fb(void)
 
     if (fbmmap == MAP_FAILED)
     {
-        fprintf(stderr, "Error: failed to map framebuffer device to memory\n");
+        LOG1("Error: failed to map framebuffer device to memory\n");
         exit(EXIT_FAILURE);
     }
 }
@@ -136,7 +147,7 @@ static void init_kbd()
 {
     if((kbdfd = open(kbd_device, O_RDWR)) == -1)
     {
-        fprintf(stderr, "cannot open kbd device %s\n", kbd_device);
+        LOG1("cannot open kbd device %s\n", kbd_device);
         exit(EXIT_FAILURE);
     }
 }
@@ -155,29 +166,26 @@ static void init_mouse()
 
     if((mousefd = open(mouse_device, O_RDWR)) == -1)
     {
-        fprintf(stderr, "cannot open mouse device %s\n", mouse_device);
+        LOG1("Error: Can not open mouse device \"%s\".\n", mouse_device);
         exit(EXIT_FAILURE);
     }
 
     // Get the range of X and Y
     if(ioctl(mousefd, EVIOCGABS(ABS_X), &info)) {
-        fprintf(stderr, "cannot get ABS_X info, %s\n", strerror(errno));
+        LOG1("Error: ioctl call failed - can not get ABS_X info on mouse device.\n%s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
     xmin = info.minimum;
     xmax = info.maximum;
 
     if(ioctl(mousefd, EVIOCGABS(ABS_Y), &info)) {
-        fprintf(stderr, "cannot get ABS_Y info, %s\n", strerror(errno));
+        LOG1("Error: ioctl call failed - can not get ABS_Y info on mouse device.\n%s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
     ymin = info.minimum;
     ymax = info.maximum;
 
-    fprintf(stderr, "xmin=%d, xmax=%d, ymin=%d, ymax=%d\n",
-            (int) xmin, (int) xmax,
-            (int) ymin, (int) ymax
-            );
+    LOG2("xmin=%d, xmax=%d, ymin=%d, ymax=%d\n", (int) xmin, (int) xmax, (int) ymin, (int) ymax);
 }
 
 static void cleanup_mouse()
@@ -192,20 +200,18 @@ static void cleanup_mouse()
 
 static void init_fb_server(int argc, char **argv)
 {
-    fprintf(stderr, "Initializing server...\n");
+    LOG2("Initializing server...\n");
 
     /* Allocate the VNC server buffer to be managed (not manipulated) by
      * libvncserver. */
-//    vncbuf = calloc(scrinfo.xres * scrinfo.yres, bytespp);
-    vncbuf = calloc(scrinfo.xres * scrinfo.yres, sizeof(uint32_t));
+    vncbuf = calloc(scrinfo.xres * scrinfo.yres, bytespp + 1);
     assert(vncbuf != NULL);
 
     /* Allocate the comparison buffer for detecting drawing updates from frame
      * to frame. */
-    fbbuf = calloc(scrinfo.xres * scrinfo.yres, bytespp);
+    fbbuf = calloc(scrinfo.xres * scrinfo.yres, bytespp + 1);
     assert(fbbuf != NULL);
 
-    /* TODO: This assumes scrinfo.bits_per_pixel is 16. */
     server = rfbGetScreen(&argc, argv, scrinfo.xres, scrinfo.yres, BITS_PER_SAMPLE, SAMPLES_PER_PIXEL, bytespp);
     assert(server != NULL);
 
@@ -246,10 +252,10 @@ void injectKeyEvent(uint16_t code, uint16_t value)
 
     if(write(kbdfd, &ev, sizeof(ev)) < 0)
     {
-        fprintf(stderr, "write event failed, %s\n", strerror(errno));
+        LOG1("write event failed, %s\n", strerror(errno));
     }
 
-    fprintf(stderr, "injectKey (%d, %d)\n", code, value);
+    LOG2("injectKey (%d, %d)\n", code, value);
 }
 
 static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
@@ -315,7 +321,7 @@ static void keyevent(rfbBool down, rfbKeySym key, rfbClientPtr cl)
 {
     int scancode;
 
-    fprintf(stderr, "Got keysym: %04x (down=%d)\n", (unsigned int) key, (int) down);
+    LOG2("Got keysym: %04x (down=%d)\n", (unsigned int) key, (int) down);
 
     if ((scancode = keysym2scancode(down, key, cl)))
     {
@@ -344,7 +350,7 @@ void injectMouseEvent(int down, int x, int y)
     ev.value = down;
     if(write(mousefd, &ev, sizeof(ev)) < 0)
     {
-        fprintf(stderr, "write event failed, %s\n", strerror(errno));
+        LOG1("write event failed, %s\n", strerror(errno));
     }
 
     // Then send the X
@@ -354,7 +360,7 @@ void injectMouseEvent(int down, int x, int y)
     ev.value = x;
     if(write(mousefd, &ev, sizeof(ev)) < 0)
     {
-        fprintf(stderr, "write event failed, %s\n", strerror(errno));
+        LOG1("write event failed, %s\n", strerror(errno));
     }
 
     // Then send the Y
@@ -364,7 +370,7 @@ void injectMouseEvent(int down, int x, int y)
     ev.value = y;
     if(write(mousefd, &ev, sizeof(ev)) < 0)
     {
-        printf("write event failed, %s\n", strerror(errno));
+        LOG1("write event failed, %s\n", strerror(errno));
     }
 
     // Finally send the SYN
@@ -374,10 +380,10 @@ void injectMouseEvent(int down, int x, int y)
     ev.value = 0;
     if(write(mousefd, &ev, sizeof(ev)) < 0)
     {
-        fprintf(stderr, "write event failed, %s\n", strerror(errno));
+        LOG1("write event failed, %s\n", strerror(errno));
     }
 
-    fprintf(stderr, "injectPtrEvent (x=%d, y=%d, down=%d)\n", x, y, down);
+    LOG2("injectPtrEvent (x=%d, y=%d, down=%d)\n", x, y, down);
 }
 
 static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
@@ -391,7 +397,7 @@ by a press and release of button 4, and each step downwards is represented by
 a press and release of button 5.
   From: http://www.vislab.usyd.edu.au/blogs/index.php/2009/05/22/an-headerless-indexed-protocol-for-input-1?blog=61 */
 
-        //fprintf(stderr, "Got ptrevent: %04x (x=%d, y=%d)\n", buttonMask, x, y);
+        //LOG2("Got ptrevent: %04x (x=%d, y=%d)\n", buttonMask, x, y);
         if(buttonMask & 1) {
             // Simulate left mouse event
             injectMouseEvent(1, x, y);
@@ -429,7 +435,7 @@ static void update_screen(void)
     if(timeToLogFPS())
     {
         double fps = frames / LOG_TIME;
-        fprintf(stderr, "  fps: %f\n", fps);
+        LOG2("  fps: %f\n", fps);
         frames = 0;
     }
 #endif
@@ -439,8 +445,8 @@ static void update_screen(void)
     xstep = 3;
     uint32_t *f, *c, *r;
 
-    varblock.min_i = varblock.min_j = 9999;
-    varblock.max_i = varblock.max_j = -1;
+    varblock.min_x = varblock.min_y = 9999;
+    varblock.max_x = varblock.max_y = -1;
 
     f = (uint32_t *)fbmmap;        /* -> framebuffer         */
     c = (uint32_t *)fbbuf;         /* -> compare framebuffer */
@@ -459,19 +465,21 @@ static void update_screen(void)
 
                 // Translate the pixel for the remote framebuffer
                 *r = PIXEL_FB_TO_RFB(pixel,
-                        varblock.r_offset, varblock.g_offset, varblock.b_offset);
+                         varblock.r_offset,
+                         varblock.g_offset,
+                         varblock.b_offset);
 
-                if (x < varblock.min_i)
-                    varblock.min_i = x;
+                if (x < varblock.min_x)
+                    varblock.min_x = x;
                 else
                 {
-                    if (x > varblock.max_i)
-                        varblock.max_i = x;
+                    if (x > varblock.max_x)
+                        varblock.max_x = x;
 
-                    if (y > varblock.max_j)
-                        varblock.max_j = y;
-                    else if (y < varblock.min_j)
-                        varblock.min_j = y;
+                    if (y > varblock.max_y)
+                        varblock.max_y = y;
+                    else if (y < varblock.min_y)
+                        varblock.min_y = y;
                 }
             }
 
@@ -481,16 +489,16 @@ static void update_screen(void)
         }
     }
 
-    if (varblock.min_i < 9999)
+    if (varblock.min_x < 9999)
     {
-        if (varblock.max_i < 0)
-            varblock.max_i = varblock.min_i;
+        if (varblock.max_x < 0)
+            varblock.max_x = varblock.min_x;
 
-        if (varblock.max_j < 0)
-            varblock.max_j = varblock.min_j;
+        if (varblock.max_y < 0)
+            varblock.max_y = varblock.min_y;
 
-        rfbMarkRectAsModified(server, varblock.min_i, varblock.min_j,
-                              varblock.max_i + 2, varblock.max_j + 2);
+        rfbMarkRectAsModified(server, varblock.min_x, varblock.min_y,
+                              varblock.max_x, varblock.max_y);
 
         rfbProcessEvents(server, 10000);
     }
@@ -500,11 +508,13 @@ static void update_screen(void)
 
 void print_usage(char **argv)
 {
-    fprintf(stdout, "%s [-f device] [-k device] [-m device] [-p port] [-h]\n"
+    fprintf(stdout, "%s [-f device] [-k device] [-m device] [-p port] [-v|-vv] [-h]\n"
                     "-p port: VNC port, default is 5900\n"
                     "-f device: framebuffer device node, default is /dev/fb0\n"
                     "-k device: keyboard device node, default is /dev/input/event2\n"
                     "-m device: mouse device node, default is /dev/input/event3\n"
+                    "-v : Verbose output, errors only (to stderr stream)\n"
+                    "-vv : Very verbose output, errors and debugging (to stderr stream)\n"
                     "-h : print this help\n"
             , *argv);
 }
@@ -540,24 +550,32 @@ int main(int argc, char **argv)
                     i++;
                     vnc_port = atoi(argv[i]);
                     break;
+                case 'v':
+                    if (*(argv[i] + 2) == 'v') {
+                        VERBOSITY = 2;
+                    } else {
+                        VERBOSITY = 1;
+                    }
+
+                    break;
                 }
             }
             i++;
         }
     }
 
-    fprintf(stderr, "Initializing framebuffer device %s...\n", fb_device);
+    LOG2("Initializing framebuffer device %s...\n", fb_device);
     init_fb();
-    fprintf(stderr, "Initializing keyboard device %s...\n", kbd_device);
+    LOG2("Initializing keyboard device %s...\n", kbd_device);
     init_kbd();
-    fprintf(stderr, "Initializing mouse device %s...\n", mouse_device);
+    LOG2("Initializing mouse device %s...\n", mouse_device);
     init_mouse();
 
-    fprintf(stderr, "Initializing VNC server:\n");
-    fprintf(stderr, "	width:  %d\n", (int)scrinfo.xres);
-    fprintf(stderr, "	height: %d\n", (int)scrinfo.yres);
-    fprintf(stderr, "	bpp:    %d\n", (int)scrinfo.bits_per_pixel);
-    fprintf(stderr, "	port:   %d\n", (int)vnc_port);
+    LOG2("Initializing VNC server:\n");
+    LOG2("	width:  %d\n", (int) scrinfo.xres);
+    LOG2("	height: %d\n", (int) scrinfo.yres);
+    LOG2("	bpp:    %d\n", (int) scrinfo.bits_per_pixel);
+    LOG2("	port:   %d\n", (int) vnc_port);
     init_fb_server(argc, argv);
 
     /* Implement our own event loop to detect changes in the framebuffer. */
@@ -570,7 +588,7 @@ int main(int argc, char **argv)
         update_screen();
     }
 
-    fprintf(stderr, "Cleaning up...\n");
+    LOG2("Cleaning up...\n");
     cleanup_fb();
     cleanup_kbd();
     cleanup_mouse();
