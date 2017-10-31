@@ -119,7 +119,7 @@ static void init_fb(void)
 
     if (fbmmap == MAP_FAILED)
     {
-        fprintf(stderr, "mmap failed\n");
+        fprintf(stderr, "Error: failed to map framebuffer device to memory\n");
         exit(EXIT_FAILURE);
     }
 }
@@ -196,7 +196,8 @@ static void init_fb_server(int argc, char **argv)
 
     /* Allocate the VNC server buffer to be managed (not manipulated) by
      * libvncserver. */
-    vncbuf = calloc(scrinfo.xres * scrinfo.yres, bytespp);
+//    vncbuf = calloc(scrinfo.xres * scrinfo.yres, bytespp);
+    vncbuf = calloc(scrinfo.xres * scrinfo.yres, sizeof(uint32_t));
     assert(vncbuf != NULL);
 
     /* Allocate the comparison buffer for detecting drawing updates from frame
@@ -415,9 +416,10 @@ int timeToLogFPS() {
     return elapsed > LOG_TIME;
 }
 
-//#define COLOR_MASK  0x1f001f
-#define COLOR_MASK  (((1 << BITS_PER_SAMPLE) << 1) - 1)
-#define PIXEL_FB_TO_RFB(p,r_offset,g_offset,b_offset) ((p>>r_offset)&COLOR_MASK) | (((p>>g_offset)&COLOR_MASK)<<BITS_PER_SAMPLE) | (((p>>b_offset)&COLOR_MASK)<<(2*BITS_PER_SAMPLE))
+#define COLOR_MASK  0x1f001f
+//#define COLOR_MASK  (((1 << BITS_PER_SAMPLE) << 1) - 1)
+#define PIXEL_FB_TO_RFB(p,r,g,b) ((p>>r)&COLOR_MASK) | (((p>>g)&COLOR_MASK)<<BITS_PER_SAMPLE) | (((p>>b)&COLOR_MASK)<<(2*BITS_PER_SAMPLE))
+//#define PIXEL_FB_TO_RFB(p,r,g,b) ((p>>r)&0x1f001f)|(((p>>g)&0x1f001f)<<5)|(((p>>b)&0x1f001f)<<10)
 
 static void update_screen(void)
 {
@@ -432,20 +434,21 @@ static void update_screen(void)
     }
 #endif
 
+    int x, y;
+    int xstep = bytespp/4;
+    xstep = 3;
+    uint32_t *f, *c, *r;
+
     varblock.min_i = varblock.min_j = 9999;
     varblock.max_i = varblock.max_j = -1;
 
-    uint32_t *f = (uint32_t *)fbmmap;        /* -> framebuffer         */
-    uint32_t *c = (uint32_t *)fbbuf;         /* -> compare framebuffer */
-    uint32_t *r = (uint32_t *)vncbuf;        /* -> remote framebuffer  */
+    f = (uint32_t *)fbmmap;        /* -> framebuffer         */
+    c = (uint32_t *)fbbuf;         /* -> compare framebuffer */
+    r = (uint32_t *)vncbuf;        /* -> remote framebuffer  */
 
-    int xstep = 4/bytespp;
-
-    int y;
     for (y = 0; y < (int)scrinfo.yres; y++)
     {
         /* Compare every 1/2/4 pixels at a time */
-        int x;
         for (x = 0; x < (int)scrinfo.xres; x += xstep)
         {
             uint32_t pixel = *f;
@@ -454,14 +457,9 @@ static void update_screen(void)
             {
                 *c = pixel;
 
-#if 0
-                /* XXX: Undo the checkered pattern to test the efficiency
-                 * gain using hextile encoding. */
-                if (pixel == 0x18e320e4 || pixel == 0x20e418e3)
-                    pixel = 0x18e318e3;
-#endif
+                // Translate the pixel for the remote framebuffer
                 *r = PIXEL_FB_TO_RFB(pixel,
-                                     varblock.r_offset, varblock.g_offset, varblock.b_offset);
+                        varblock.r_offset, varblock.g_offset, varblock.b_offset);
 
                 if (x < varblock.min_i)
                     varblock.min_i = x;
@@ -491,12 +489,8 @@ static void update_screen(void)
         if (varblock.max_j < 0)
             varblock.max_j = varblock.min_j;
 
-        fprintf(stderr, "Dirty page: %dx%d+%d+%d...\n",
-                (varblock.max_i+2) - varblock.min_i, (varblock.max_j+1) - varblock.min_j,
-                varblock.min_i, varblock.min_j);
-
         rfbMarkRectAsModified(server, varblock.min_i, varblock.min_j,
-                              varblock.max_i + 2, varblock.max_j + 1);
+                              varblock.max_i + 2, varblock.max_j + 2);
 
         rfbProcessEvents(server, 10000);
     }
@@ -506,7 +500,7 @@ static void update_screen(void)
 
 void print_usage(char **argv)
 {
-    fprintf(stderr, "%s [-f device] [-k device] [-m device] [-p port] [-h]\n"
+    fprintf(stdout, "%s [-f device] [-k device] [-m device] [-p port] [-h]\n"
                     "-p port: VNC port, default is 5900\n"
                     "-f device: framebuffer device node, default is /dev/fb0\n"
                     "-k device: keyboard device node, default is /dev/input/event2\n"
