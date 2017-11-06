@@ -43,9 +43,11 @@
 #if 0  // 24-bit/32-bit
 #define BITS_PER_SAMPLE     8
 #define SAMPLES_PER_PIXEL   3
+#define COLOR_MASK          0xff00ff
 #else  // 16-bit
 #define BITS_PER_SAMPLE     5
 #define SAMPLES_PER_PIXEL   2
+#define COLOR_MASK          0x1f001f
 #endif
 
 int VERBOSITY = 1;
@@ -229,7 +231,7 @@ static void init_fb_server(int argc, char **argv)
     /* Mark as dirty since we haven't sent any updates at all yet. */
     rfbMarkRectAsModified(server, 0, 0, scrinfo.xres, scrinfo.yres);
 
-    /* No idea. */
+    /* Specify the bit offset of each colour in a pixel */
     varblock.r_offset = scrinfo.red.offset + scrinfo.red.length - BITS_PER_SAMPLE;
     varblock.g_offset = scrinfo.green.offset + scrinfo.green.length - BITS_PER_SAMPLE;
     varblock.b_offset = scrinfo.blue.offset + scrinfo.blue.length - BITS_PER_SAMPLE;
@@ -244,12 +246,22 @@ void injectKeyEvent(uint16_t code, uint16_t value)
     struct input_event ev;
 
     memset(&ev, 0, sizeof(ev));
-    gettimeofday(&ev.time, 0);
 
+    // Send the key command
+    gettimeofday(&ev.time, 0);
     ev.type  = EV_KEY;
     ev.code  = code;
     ev.value = value;
+    if(write(kbdfd, &ev, sizeof(ev)) < 0)
+    {
+        LOG1("write event failed, %s\n", strerror(errno));
+    }
 
+    // Then send the SYN
+    gettimeofday(&ev.time, 0);
+    ev.type  = EV_SYN;
+    ev.code  = 0;
+    ev.value = 0;
     if(write(kbdfd, &ev, sizeof(ev)) < 0)
     {
         LOG1("write event failed, %s\n", strerror(errno));
@@ -422,10 +434,10 @@ int timeToLogFPS() {
     return elapsed > LOG_TIME;
 }
 
-#define COLOR_MASK  0x1f001f
-//#define COLOR_MASK  (((1 << BITS_PER_SAMPLE) << 1) - 1)
-#define PIXEL_FB_TO_RFB(p,r,g,b) ((p>>r)&COLOR_MASK) | (((p>>g)&COLOR_MASK)<<BITS_PER_SAMPLE) | (((p>>b)&COLOR_MASK)<<(2*BITS_PER_SAMPLE))
-//#define PIXEL_FB_TO_RFB(p,r,g,b) ((p>>r)&0x1f001f)|(((p>>g)&0x1f001f)<<5)|(((p>>b)&0x1f001f)<<10)
+#define PIXEL_FB_TO_RFB(p,r,g,b) \
+    ((p>>r) & COLOR_MASK) | \
+   (((p>>g) & COLOR_MASK) << BITS_PER_SAMPLE) | \
+   (((p>>b) & COLOR_MASK) << (2 * BITS_PER_SAMPLE))
 
 static void update_screen(void)
 {
@@ -441,8 +453,8 @@ static void update_screen(void)
 #endif
 
     int x, y;
-    int xstep = bytespp/4;
-    xstep = 3;
+    int xstep = 4/bytespp;
+
     uint32_t *f, *c, *r;
 
     varblock.min_x = varblock.min_y = 9999;
