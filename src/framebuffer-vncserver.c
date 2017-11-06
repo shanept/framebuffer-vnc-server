@@ -35,7 +35,7 @@
 
 /* libvncserver */
 #include "rfb/rfb.h"
-#include "rfb/keysym.h"
+//#include "rfb/keysym.h"
 
 /*****************************************************************************/
 //#define LOG_FPS
@@ -287,9 +287,9 @@ static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
     } else if (code >= 0xFFE1 && code <= 0xFFEE) {
         static const uint16_t map[] =
             {   KEY_LEFTSHIFT, KEY_LEFTSHIFT,
-                KEY_COMPOSE,   KEY_COMPOSE,
-                KEY_LEFTSHIFT, KEY_LEFTSHIFT,
-                0, 0,
+                KEY_LEFTCTRL,  KEY_RIGHTCTRL,
+//                KEY_COMPOSE,   KEY_COMPOSE,
+                0, 0, 0, 0,
                 KEY_LEFTALT,   KEY_RIGHTALT,
                 0, 0, 0, 0 };
         scancode = map[code & 0xF];
