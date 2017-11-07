@@ -279,6 +279,21 @@ static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
         scancode = (code & 0xF) - 1;
         if (scancode < 0) scancode += 10;
         scancode += KEY_1;
+    } else if (code >= 0x0020 && code <= 0x002F) {
+        static const uint16_t map[] =
+            {   KEY_SPACE, KEY_1, KEY_APOSTROPHE,
+                KEY_3, KEY_4, KEY_5, KEY_7,
+                KEY_APOSTROPHE, KEY_9, KEY_0, KEY_8,
+                KEY_EQUAL, KEY_COMMA, KEY_MINUS,
+                KEY_DOT, KEY_SLASH };
+        scancode = map[code & 0xF];
+    } else if ((code >= 0x005B && code <= 0x005E) ||
+               (code >= 0x007B && code <= 0x007E)) {
+        static const uint16_t map[] =
+            { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+              KEY_LEFTBRACE, KEY_BACKSLASH, KEY_RIGHTBRACE,
+              0, 0 };
+        scancode = map[code & 0xF];
     } else if (code >= 0xFF50 && code <= 0xFF58) {
         static const uint16_t map[] =
             {   KEY_HOME, KEY_LEFT, KEY_UP, KEY_RIGHT,
@@ -301,28 +316,30 @@ static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
                 KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T,
                 KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z };
         scancode = map[(code & 0x5F) - 'A'];
+    } else if (code >= 0xFFBE && code <= 0xFFC6) {
+        static const uint16_t map[] = {
+                KEY_F1, KEY_F2, KEY_F3, KEY_F4,
+                KEY_F5, KEY_F6, KEY_F7, KEY_F8,
+                KEY_F9, KEY_F10, KEY_F11, KEY_F12 };
+        scancode = map[(code & 0xFF) - 0xBE];
     } else {
         switch (code) {
 //          case 0x0003: scancode = KEY_CENTER;    break;
-            case 0x0020: scancode = KEY_SPACE;     break;
-            case 0x002C: scancode = KEY_COMMA;     break;
+            case 0x0032: scancode = KEY_EMAIL;     break; // at sign?
+            case 0x003A: scancode = KEY_SEMICOLON; break; // shift + ;
+            case 0x003B: scancode = KEY_SEMICOLON; break;
             case 0x003C: scancode = KEY_COMMA;     break;
-            case 0x002E: scancode = KEY_DOT;       break;
+            case 0x003D: scancode = KEY_EQUAL;     break;
             case 0x003E: scancode = KEY_DOT;       break;
-            case 0x002F: scancode = KEY_SLASH;     break;
             case 0x003F: scancode = KEY_SLASH;     break;
-            case 0x0032: scancode = KEY_EMAIL;     break;
-            case 0x0040: scancode = KEY_EMAIL;     break;
+            case 0x0040: scancode = KEY_2;         break; // shift + 2 (at sign)
+            case 0x0060: scancode = KEY_GRAVE;     break;
+            case 0x007E: scancode = KEY_GRAVE;     break; // tilde, shift + `
             case 0xFF08: scancode = KEY_BACKSPACE; break;
-            case 0xFF1B: scancode = KEY_BACK;      break;
             case 0xFF09: scancode = KEY_TAB;       break;
+            case 0xFF1B: scancode = KEY_ESC;       break;
             case 0xFF0D: scancode = KEY_ENTER;     break;
-//          case 0x002A: scancode = KEY_STAR;      break;
-            case 0xFFBE: scancode = KEY_F1;        break; // F1
-            case 0xFFBF: scancode = KEY_F2;        break; // F2
-            case 0xFFC0: scancode = KEY_F3;        break; // F3
-            case 0xFFC5: scancode = KEY_F4;        break; // F8
-            case 0xFFC8: rfbShutdownServer(cl->screen, TRUE); break; // F11
+            case 0xFFFF: scancode = KEY_DELETE;    break;
         }
     }
 
