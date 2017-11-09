@@ -50,11 +50,28 @@
 #define COLOR_MASK          0x1f001f
 #endif
 
+static const char *DEV_FMT = "/dev/input/event%d";
+
+static const char *KBD_PATTERNS[] = {
+    "VNC",      /* VNC Keyboard driver, 1st choice */
+    "key",      /* Keypad */
+    "qwerty",   /* Emulator */
+    NULL
+};
+
+static const char *PTR_PATTERNS[] = {
+    "touch",    /* touchpad */
+    "qwerty",   /* Emulator */
+    NULL
+};
+
 int VERBOSITY = 1;
 
 static char fb_device[PATH_MAX] = "/dev/fb0";
-static char kbd_device[PATH_MAX] = "/dev/input/event2";
-static char mouse_device[PATH_MAX] = "/dev/input/event3";
+static char *kbd_device   = 0;
+static char *mouse_device = 0;
+// static char kbd_device[PATH_MAX] = "/dev/input/event2";
+// static char mouse_device[PATH_MAX] = "/dev/input/event3";
 static struct fb_var_screeninfo scrinfo;
 static int fbfd = -1;
 static int kbdfd = -1;
@@ -535,13 +552,74 @@ static void update_screen(void)
 
 /*****************************************************************************/
 
+int input_finder(int max_num, const char **patterns, char *path, int path_size)
+{
+    char name[PATH_MAX], trypath[PATH_MAX];
+    const char **keystr;
+    int fd = -1, i, j;
+    int device_id = -1, key_id = -1;
+
+    for (i = 0; i < max_num; i++)
+    {
+        snprintf(trypath, sizeof(trypath), DEV_FMT, i);
+
+        if ((fd = open(trypath, O_RDONLY)) < 0) {
+            continue;
+        }
+
+        if (ioctl(fd, EVIOCGNAME(sizeof(name)), name) < 0) {
+            close(fd);
+            continue;
+        }
+
+        close(fd);
+
+        for (keystr = patterns, j = 0; *keystr; keystr++, j++) {
+            if (!strstr(name, *keystr)) {
+                continue;
+            }
+
+            /* save the device matching the earliest pattern */
+            if (key_id < 0 || key_id > j) {
+                key_id = j;
+                device_id = i;
+                strncpy(path, trypath, path_size);
+                path[path_size - 1] = '\0';
+            }
+        }
+    }
+
+    if (device_id >= 0) {
+        LOG2("Found input device %s by keyword '%s'.\n", path, patterns[key_id]);
+    }
+
+    return device_id;
+}
+
+void input_search(void)
+{
+    const int max_input_num = 20;
+
+    if (input_finder(max_input_num, KBD_PATTERNS, \
+        kbd_device, sizeof kbd_device) < 0) {
+        LOG1("Failed to auto-detect keyboard device.\nPlease manually specify (See -k flag).\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (input_finder(max_input_num, PTR_PATTERNS, \
+        mouse_device, sizeof mouse_device) < 0) {
+        LOG1("Failed to auto-detect mouse device.\nPlease manually specify (see -m flag).\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
 void print_usage(char **argv)
 {
     fprintf(stdout, "%s [-f device] [-k device] [-m device] [-p port] [-v|-vv] [-h]\n"
                     "-p port: VNC port, default is 5900\n"
                     "-f device: framebuffer device node, default is /dev/fb0\n"
-                    "-k device: keyboard device node, default is /dev/input/event2\n"
-                    "-m device: mouse device node, default is /dev/input/event3\n"
+                    "-k device: keyboard device node\n"
+                    "-m device: mouse device node\n"
                     "-v : Verbose output, errors only (to stderr stream)\n"
                     "-vv : Very verbose output, errors and debugging (to stderr stream)\n"
                     "-h : print this help\n"
@@ -592,6 +670,9 @@ int main(int argc, char **argv)
             i++;
         }
     }
+
+    // Automagically find inputs, if not already specified
+    input_search();
 
     LOG2("Initializing framebuffer device %s...\n", fb_device);
     init_fb();
