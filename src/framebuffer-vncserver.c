@@ -62,6 +62,7 @@ static const char *KBD_PATTERNS[] = {
 static const char *PTR_PATTERNS[] = {
     "touch",    /* touchpad */
     "qwerty",   /* Emulator */
+    "Tablet",
     NULL
 };
 
@@ -552,14 +553,14 @@ static void update_screen(void)
 
 /*****************************************************************************/
 
-int input_finder(int max_num, const char **patterns, char *path, int path_size)
+int input_finder(int max_num, const char **patterns, char *path)
 {
     char name[PATH_MAX], trypath[PATH_MAX];
     const char **keystr;
     int fd = -1, i, j;
     int device_id = -1, key_id = -1;
 
-    for (i = 0; i < max_num; i++)
+    for (i = 0; i < max_num && device_id < 0; i++)
     {
         snprintf(trypath, sizeof(trypath), DEV_FMT, i);
 
@@ -583,14 +584,15 @@ int input_finder(int max_num, const char **patterns, char *path, int path_size)
             if (key_id < 0 || key_id > j) {
                 key_id = j;
                 device_id = i;
-                strncpy(path, trypath, path_size);
-                path[path_size - 1] = '\0';
+                path = trypath;
+
+                break;
             }
         }
     }
 
     if (device_id >= 0) {
-        LOG2("Found input device %s by keyword '%s'.\n", path, patterns[key_id]);
+        LOG2("Found input device %s by keyword \"%s\".\n", path, patterns[key_id]);
     }
 
     return device_id;
@@ -600,14 +602,12 @@ void input_search(void)
 {
     const int max_input_num = 20;
 
-    if (input_finder(max_input_num, KBD_PATTERNS, \
-        kbd_device, sizeof kbd_device) < 0) {
+    if (input_finder(max_input_num, KBD_PATTERNS, kbd_device) < 0) {
         LOG1("Failed to auto-detect keyboard device.\nPlease manually specify (See -k flag).\n");
         exit(EXIT_FAILURE);
     }
 
-    if (input_finder(max_input_num, PTR_PATTERNS, \
-        mouse_device, sizeof mouse_device) < 0) {
+    if (input_finder(max_input_num, PTR_PATTERNS, mouse_device) < 0) {
         LOG1("Failed to auto-detect mouse device.\nPlease manually specify (see -m flag).\n");
         exit(EXIT_FAILURE);
     }
