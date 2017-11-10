@@ -35,7 +35,6 @@
 
 /* libvncserver */
 #include "rfb/rfb.h"
-//#include "rfb/keysym.h"
 
 /*****************************************************************************/
 //#define LOG_FPS
@@ -74,8 +73,6 @@ int VERBOSITY = 1;
 static char fb_device[PATH_MAX] = "/dev/fb0";
 static char *kbd_device   = 0;
 static char *mouse_device = 0;
-// static char kbd_device[PATH_MAX] = "/dev/input/event2";
-// static char mouse_device[PATH_MAX] = "/dev/input/event3";
 static struct fb_var_screeninfo scrinfo;
 static int fbfd = -1;
 static int kbdfd = -1;
