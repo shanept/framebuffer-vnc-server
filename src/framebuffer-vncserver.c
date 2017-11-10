@@ -107,13 +107,21 @@ static struct varblock_t
     int rfb_maxy;
 } varblock;
 
+static struct button_mask
+{
+    int left;
+    int middle;
+    int right;
+    int up;
+    int down;
+} last_mouse_state;
+
 /*****************************************************************************/
 
 static void keyevent(rfbBool down, rfbKeySym key, rfbClientPtr cl);
 static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl);
 
 /*****************************************************************************/
-
 
 static void init_fb(void)
 {
@@ -382,17 +390,30 @@ static void keyevent(rfbBool down, rfbKeySym key, rfbClientPtr cl)
     }
 }
 
-void injectPtrEvent(int down, int x, int y)
+struct button_mask *BtnMsk2Struct(int buttonMask)
 {
-    struct input_event ev;
+    struct button_mask *btn;
+
+    btn = (struct button_mask*) malloc(sizeof(struct button_mask));
+    btn->left   = (buttonMask >> 0) & 0x1;
+    btn->middle = (buttonMask >> 1) & 0x1;
+    btn->right  = (buttonMask >> 2) & 0x1;
+    btn->up     = (buttonMask >> 3) & 0x1;
+    btn->down   = (buttonMask >> 4) & 0x1;
+
+    return btn;
+}
+
+static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
+{
+    LOG2("Got ptrevent: %04x (x=%d, y=%d)\n", buttonMask, x, y);
+
+    struct input_event  ev;
+    struct button_mask *mask = BtnMsk2Struct(buttonMask);
 
     // Calculate the final x and y
-    // Fake touch screen always reports zero
-    if (xmin != 0 && xmax != 0 && ymin != 0 && ymax != 0)
-    {
-        x = xmin + (x * (xmax - xmin)) / (scrinfo.xres);
-        y = ymin + (y * (ymax - ymin)) / (scrinfo.yres);
-    }
+    x = xmin + (x * (xmax - xmin)) / (scrinfo.xres);
+    y = ymin + (y * (ymax - ymin)) / (scrinfo.yres);
 
     memset(&ev, 0, sizeof(ev));
 
@@ -400,7 +421,7 @@ void injectPtrEvent(int down, int x, int y)
     gettimeofday(&ev.time, 0);
     ev.type  = EV_KEY;
     ev.code  = BTN_TOUCH;
-    ev.value = down;
+    ev.value = mask->down;
     if(write(mousefd, &ev, sizeof(ev)) < 0)
     {
         LOG1("write event failed, %s\n", strerror(errno));
@@ -426,6 +447,71 @@ void injectPtrEvent(int down, int x, int y)
         LOG1("write event failed, %s\n", strerror(errno));
     }
 
+    if (last_mouse_state.left != mask->left) {
+        last_mouse_state.left  = mask->left;
+
+        gettimeofday(&ev.time, 0);
+        ev.type  = EV_KEY;
+        ev.code  = BTN_LEFT;
+        ev.value = mask->left;
+        if(write(mousefd, &ev, sizeof(ev)) < 0)
+        {
+            LOG1("write event failed, %s\n", strerror(errno));
+        }
+    }
+
+    if (last_mouse_state.middle != mask->middle) {
+        last_mouse_state.middle  = mask->middle;
+
+        gettimeofday(&ev.time, 0);
+        ev.type  = EV_KEY;
+        ev.code  = BTN_MIDDLE;
+        ev.value = mask->middle;
+        if(write(mousefd, &ev, sizeof(ev)) < 0)
+        {
+            LOG1("write event failed, %s\n", strerror(errno));
+        }
+    }
+
+    if (last_mouse_state.right != mask->right) {
+        last_mouse_state.right  = mask->right;
+
+        gettimeofday(&ev.time, 0);
+        ev.type  = EV_KEY;
+        ev.code  = BTN_RIGHT;
+        ev.value = mask->right;
+        if(write(mousefd, &ev, sizeof(ev)) < 0)
+        {
+            LOG1("write event failed, %s\n", strerror(errno));
+        }
+    }
+
+    if (last_mouse_state.up != mask->up) {
+        last_mouse_state.up  = mask->up;
+
+        gettimeofday(&ev.time, 0);
+        ev.type  = EV_REL;
+        ev.code  = REL_WHEEL;
+        ev.value = mask->up;
+        if(write(mousefd, &ev, sizeof(ev)) < 0)
+        {
+            LOG1("write event failed, %s\n", strerror(errno));
+        }
+    }
+
+    if (last_mouse_state.down != mask->down) {
+        last_mouse_state.down  = mask->down;
+
+        gettimeofday(&ev.time, 0);
+        ev.type  = EV_REL;
+        ev.code  = REL_WHEEL;
+        ev.value = -mask->down;
+        if(write(mousefd, &ev, sizeof(ev)) < 0)
+        {
+            LOG1("write event failed, %s\n", strerror(errno));
+        }
+    }
+
     // Finally send the SYN
     gettimeofday(&ev.time, 0);
     ev.type  = EV_SYN;
@@ -435,27 +521,6 @@ void injectPtrEvent(int down, int x, int y)
     {
         LOG1("write event failed, %s\n", strerror(errno));
     }
-
-    LOG2("injectPtrEvent (x=%d, y=%d, down=%d)\n", x, y, down);
-}
-
-static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
-{
-        /* Indicates either pointer movement or a pointer button press or release. The pointer is
-now at (x-position, y-position), and the current state of buttons 1 to 8 are represented
-by bits 0 to 7 of button-mask respectively, 0 meaning up, 1 meaning down (pressed).
-On a conventional mouse, buttons 1, 2 and 3 correspond to the left, middle and right
-buttons on the mouse. On a wheel mouse, each step of the wheel upwards is represented
-by a press and release of button 4, and each step downwards is represented by
-a press and release of button 5.
-  From: http://www.vislab.usyd.edu.au/blogs/index.php/2009/05/22/an-headerless-indexed-protocol-for-input-1?blog=61 */
-
-        //LOG2("Got ptrevent: %04x (x=%d, y=%d)\n", buttonMask, x, y);
-        if(buttonMask & 1) {
-            // Simulate left mouse event
-            injectPtrEvent(1, x, y);
-            injectPtrEvent(0, x, y);
-        }
 }
 
 /*****************************************************************************/
