@@ -318,13 +318,13 @@ static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
     } else if (code >= 0xFF50 && code <= 0xFF58) {
         static const uint16_t map[] =
             {   KEY_HOME, KEY_LEFT, KEY_UP, KEY_RIGHT,
-                KEY_DOWN, 0, 0, KEY_END, 0 };
+                KEY_DOWN, KEY_PAGEUP, KEY_PAGEDOWN,
+                KEY_END, 0 };
         scancode = map[code & 0xF];
     } else if (code >= 0xFFE1 && code <= 0xFFEE) {
         static const uint16_t map[] =
             {   KEY_LEFTSHIFT, KEY_LEFTSHIFT,
                 KEY_LEFTCTRL,  KEY_RIGHTCTRL,
-//                KEY_COMPOSE,   KEY_COMPOSE,
                 0, 0, 0, 0,
                 KEY_LEFTALT,   KEY_RIGHTALT,
                 0, 0, 0, 0 };
@@ -337,15 +337,20 @@ static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
                 KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T,
                 KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z };
         scancode = map[(code & 0x5F) - 'A'];
-    } else if (code >= 0xFFBE && code <= 0xFFC6) {
+    } else if (code >= 0xFFA0 && code <= 0xFFC6) {
         static const uint16_t map[] = {
-                KEY_F1, KEY_F2, KEY_F3, KEY_F4,
-                KEY_F5, KEY_F6, KEY_F7, KEY_F8,
-                KEY_F9, KEY_F10, KEY_F11, KEY_F12 };
-        scancode = map[(code & 0xFF) - 0xBE];
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                KEY_KPASTERISK, KEY_KPPLUS, KEY_KPCOMMA,
+                KEY_KPMINUS,    KEY_KPDOT,  KEY_KPSLASH,
+                KEY_KP0, KEY_KP1, KEY_KP2,  KEY_KP3,
+                KEY_KP4, KEY_KP5, KEY_KP6,  KEY_KP7,
+                KEY_KP8, KEY_KP9, KEY_F1,   KEY_F2,
+                KEY_F3,  KEY_F4,  KEY_F5,   KEY_F6,
+                KEY_F7,  KEY_F8,  KEY_F9,   KEY_F10,
+                KEY_F11, KEY_F12 };
+        scancode = map[(code & 0xFF) - 0xA0];
     } else {
         switch (code) {
-//          case 0x0003: scancode = KEY_CENTER;    break;
             case 0x0032: scancode = KEY_EMAIL;     break; // at sign?
             case 0x003A: scancode = KEY_SEMICOLON; break; // shift + ;
             case 0x003B: scancode = KEY_SEMICOLON; break;
@@ -360,6 +365,7 @@ static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
             case 0xFF09: scancode = KEY_TAB;       break;
             case 0xFF1B: scancode = KEY_ESC;       break;
             case 0xFF0D: scancode = KEY_ENTER;     break;
+            case 0xFF8D: scancode = KEY_KPENTER;   break;
             case 0xFFFF: scancode = KEY_DELETE;    break;
         }
     }
