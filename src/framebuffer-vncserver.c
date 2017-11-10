@@ -385,7 +385,7 @@ static void keyevent(rfbBool down, rfbKeySym key, rfbClientPtr cl)
     }
 }
 
-void injectMouseEvent(int down, int x, int y)
+void injectPtrEvent(int down, int x, int y)
 {
     struct input_event ev;
 
@@ -444,7 +444,7 @@ void injectMouseEvent(int down, int x, int y)
 
 static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
 {
-        /* Indicates either pointer movement or a pointer button press or release. The pinter is
+        /* Indicates either pointer movement or a pointer button press or release. The pointer is
 now at (x-position, y-position), and the current state of buttons 1 to 8 are represented
 by bits 0 to 7 of button-mask respectively, 0 meaning up, 1 meaning down (pressed).
 On a conventional mouse, buttons 1, 2 and 3 correspond to the left, middle and right
@@ -456,8 +456,8 @@ a press and release of button 5.
         //LOG2("Got ptrevent: %04x (x=%d, y=%d)\n", buttonMask, x, y);
         if(buttonMask & 1) {
             // Simulate left mouse event
-            injectMouseEvent(1, x, y);
-            injectMouseEvent(0, x, y);
+            injectPtrEvent(1, x, y);
+            injectPtrEvent(0, x, y);
         }
 }
 
@@ -658,11 +658,11 @@ int main(int argc, char **argv)
                     break;
                 case 'k':
                     i++;
-                    strcpy(kbd_device, argv[i]);
+                    kbd_device = argv[i];
                     break;
                 case 'm':
                     i++;
-                    strcpy(mouse_device, argv[i]);
+                    mouse_device = argv[i];
                     break;
                 case 'p':
                     i++;
