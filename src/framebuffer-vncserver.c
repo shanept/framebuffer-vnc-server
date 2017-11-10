@@ -544,8 +544,8 @@ static void update_screen(void)
         if (varblock.max_y < 0)
             varblock.max_y = varblock.min_y;
 
-        rfbMarkRectAsModified(server, varblock.min_x, varblock.min_y,
-                              varblock.max_x, varblock.max_y);
+        rfbMarkRectAsModified(server, varblock.min_x - 2, varblock.min_y - 2,
+                              varblock.max_x + 2, varblock.max_y + 2);
 
         rfbProcessEvents(server, 10000);
     }
