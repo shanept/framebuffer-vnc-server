@@ -39,14 +39,13 @@
 /*****************************************************************************/
 //#define LOG_FPS
 
-#if 0  // 24-bit/32-bit
+#if 0  /* 24-bit/32-bit */
 #define BITS_PER_SAMPLE     5
 #define SAMPLES_PER_PIXEL   2
-// #define COLOR_MASK          0xff00ff
-#else  // 16-bit
+#define COLOR_MASK          0xff00ff
+#else  /* 16-bit */
 #define BITS_PER_SAMPLE     5
 #define SAMPLES_PER_PIXEL   2
-// #define COLOR_MASK          0x1f001f
 #endif
 
 #define CM ((1 << BITS_PER_SAMPLE) - 1)
@@ -198,7 +197,7 @@ static void init_mouse()
         exit(EXIT_FAILURE);
     }
 
-    // Get the range of X and Y
+    /* Get the range of X and Y */
     if(ioctl(mousefd, EVIOCGABS(ABS_X), &info)) {
         LOG1("Error: ioctl call failed - can not get ABS_X info on mouse device.\n%s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -273,7 +272,7 @@ void injectKeyEvent(uint16_t code, uint16_t value)
 
     memset(&ev, 0, sizeof(ev));
 
-    // Send the key command
+    /* Send the key command */
     gettimeofday(&ev.time, 0);
     ev.type  = EV_KEY;
     ev.code  = code;
@@ -283,7 +282,7 @@ void injectKeyEvent(uint16_t code, uint16_t value)
         LOG1("write event failed, %s\n", strerror(errno));
     }
 
-    // Then send the SYN
+    /* Then send the SYN */
     gettimeofday(&ev.time, 0);
     ev.type  = EV_SYN;
     ev.code  = 0;
@@ -356,16 +355,16 @@ static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
         scancode = map[(code & 0xFF) - 0xA0];
     } else {
         switch (code) {
-            case 0x0032: scancode = KEY_EMAIL;     break; // at sign?
-            case 0x003A: scancode = KEY_SEMICOLON; break; // shift + ;
+            case 0x0032: scancode = KEY_EMAIL;     break; /* at sign? */
+            case 0x003A: scancode = KEY_SEMICOLON; break; /* shift + ; */
             case 0x003B: scancode = KEY_SEMICOLON; break;
             case 0x003C: scancode = KEY_COMMA;     break;
             case 0x003D: scancode = KEY_EQUAL;     break;
             case 0x003E: scancode = KEY_DOT;       break;
             case 0x003F: scancode = KEY_SLASH;     break;
-            case 0x0040: scancode = KEY_2;         break; // shift + 2 (at sign)
+            case 0x0040: scancode = KEY_2;         break; /* shift + 2 (at sign) */
             case 0x0060: scancode = KEY_GRAVE;     break;
-            case 0x007E: scancode = KEY_GRAVE;     break; // tilde, shift + `
+            case 0x007E: scancode = KEY_GRAVE;     break; /* tilde, shift + ` */
             case 0xFF08: scancode = KEY_BACKSPACE; break;
             case 0xFF09: scancode = KEY_TAB;       break;
             case 0xFF1B: scancode = KEY_ESC;       break;
@@ -411,13 +410,13 @@ static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
     struct input_event  ev;
     struct button_mask *mask = BtnMsk2Struct(buttonMask);
 
-    // Calculate the final x and y
+    /* Calculate the final x and y */
     x = xmin + (x * (xmax - xmin)) / (scrinfo.xres);
     y = ymin + (y * (ymax - ymin)) / (scrinfo.yres);
 
     memset(&ev, 0, sizeof(ev));
 
-    // Then send a BTN_TOUCH (required for synchronization)
+    /* Then send a BTN_TOUCH (required for synchronization) */
     gettimeofday(&ev.time, 0);
     ev.type  = EV_KEY;
     ev.code  = BTN_TOUCH;
@@ -427,7 +426,7 @@ static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
         LOG1("write event failed, %s\n", strerror(errno));
     }
 
-    // Then send the X
+    /* Then send the X */
     gettimeofday(&ev.time, 0);
     ev.type  = EV_ABS;
     ev.code  = ABS_X;
@@ -437,7 +436,7 @@ static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
         LOG1("write event failed, %s\n", strerror(errno));
     }
 
-    // Then send the Y
+    /* Then send the Y */
     gettimeofday(&ev.time, 0);
     ev.type  = EV_ABS;
     ev.code  = ABS_Y;
@@ -512,7 +511,7 @@ static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
         }
     }
 
-    // Finally send the SYN
+    /* Finally send the SYN */
     gettimeofday(&ev.time, 0);
     ev.type  = EV_SYN;
     ev.code  = 0;
@@ -525,7 +524,6 @@ static void ptrevent(int buttonMask, int x, int y, rfbClientPtr cl)
 
 /*****************************************************************************/
 
-// sec
 #define LOG_TIME    5
 
 int timeToLogFPS() {
@@ -581,7 +579,7 @@ static void update_screen(void)
             {
                 *c = pixel;
 
-                // Translate the pixel for the remote framebuffer
+                /* Translate the pixel for the remote framebuffer */
                 *r = PIXEL_FB_TO_RFB(pixel,
                          varblock.r_offset,
                          varblock.g_offset,
@@ -744,7 +742,7 @@ int main(int argc, char **argv)
         }
     }
 
-    // Automagically find inputs, if not already specified
+    /* Automagically find inputs, if not already specified */
     input_search();
 
     LOG2("Initializing framebuffer device %s...\n", fb_device);
