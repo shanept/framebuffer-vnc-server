@@ -41,14 +41,17 @@
 //#define LOG_FPS
 
 #if 0  // 24-bit/32-bit
-#define BITS_PER_SAMPLE     8
-#define SAMPLES_PER_PIXEL   3
-#define COLOR_MASK          0xff00ff
+#define BITS_PER_SAMPLE     5
+#define SAMPLES_PER_PIXEL   2
+// #define COLOR_MASK          0xff00ff
 #else  // 16-bit
 #define BITS_PER_SAMPLE     5
 #define SAMPLES_PER_PIXEL   2
-#define COLOR_MASK          0x1f001f
+// #define COLOR_MASK          0x1f001f
 #endif
+
+#define CM ((1 << BITS_PER_SAMPLE) - 1)
+#define COLOR_MASK (CM << 16) + (CM)
 
 static const char *DEV_FMT = "/dev/input/event%d";
 
