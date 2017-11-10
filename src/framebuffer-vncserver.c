@@ -553,16 +553,18 @@ static void update_screen(void)
 
 /*****************************************************************************/
 
-int input_finder(int max_num, const char **patterns, char *path)
+int input_finder(int max_num, const char **patterns, char **path)
 {
-    char name[PATH_MAX], trypath[PATH_MAX];
+    char name[PATH_MAX];
+    char *trypath = (char*) calloc(PATH_MAX + 1, sizeof(char));
+
     const char **keystr;
     int fd = -1, i, j;
     int device_id = -1, key_id = -1;
 
     for (i = 0; i < max_num && device_id < 0; i++)
     {
-        snprintf(trypath, sizeof(trypath), DEV_FMT, i);
+        snprintf(trypath, sizeof(trypath) * PATH_MAX, DEV_FMT, i);
 
         if ((fd = open(trypath, O_RDONLY)) < 0) {
             continue;
@@ -584,7 +586,7 @@ int input_finder(int max_num, const char **patterns, char *path)
             if (key_id < 0 || key_id > j) {
                 key_id = j;
                 device_id = i;
-                path = trypath;
+                *path = trypath;
 
                 break;
             }
@@ -592,7 +594,7 @@ int input_finder(int max_num, const char **patterns, char *path)
     }
 
     if (device_id >= 0) {
-        LOG2("Found input device %s by keyword \"%s\".\n", path, patterns[key_id]);
+        LOG2("Found input device %s by keyword \"%s\".\n", *path, patterns[key_id]);
     }
 
     return device_id;
@@ -602,12 +604,12 @@ void input_search(void)
 {
     const int max_input_num = 20;
 
-    if (input_finder(max_input_num, KBD_PATTERNS, kbd_device) < 0) {
+    if (input_finder(max_input_num, KBD_PATTERNS, &kbd_device) < 0) {
         LOG1("Failed to auto-detect keyboard device.\nPlease manually specify (See -k flag).\n");
         exit(EXIT_FAILURE);
     }
 
-    if (input_finder(max_input_num, PTR_PATTERNS, mouse_device) < 0) {
+    if (input_finder(max_input_num, PTR_PATTERNS, &mouse_device) < 0) {
         LOG1("Failed to auto-detect mouse device.\nPlease manually specify (see -m flag).\n");
         exit(EXIT_FAILURE);
     }
