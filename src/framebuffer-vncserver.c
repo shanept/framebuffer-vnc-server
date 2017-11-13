@@ -332,7 +332,7 @@ static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
                 0, 0, 0, 0,
                 KEY_LEFTALT,   KEY_RIGHTALT,
                 0, 0, 0, 0 };
-        scancode = map[code & 0xF];
+        scancode = map[(code & 0xF) - 1];
     } else if ((code >= 'A' && code <= 'Z') || (code >= 'a' && code <= 'z')) {
         static const uint16_t map[] = {
                 KEY_A, KEY_B, KEY_C, KEY_D, KEY_E,
@@ -341,17 +341,17 @@ static int keysym2scancode(rfbBool down, rfbKeySym key, rfbClientPtr cl)
                 KEY_P, KEY_Q, KEY_R, KEY_S, KEY_T,
                 KEY_U, KEY_V, KEY_W, KEY_X, KEY_Y, KEY_Z };
         scancode = map[(code & 0x5F) - 'A'];
-    } else if (code >= 0xFFA0 && code <= 0xFFC6) {
+    } else if (code >= 0xFFA0 && code <= 0xFFC9) {
         static const uint16_t map[] = {
                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                KEY_KPASTERISK, KEY_KPPLUS, KEY_KPCOMMA,
-                KEY_KPMINUS,    KEY_KPDOT,  KEY_KPSLASH,
-                KEY_KP0, KEY_KP1, KEY_KP2,  KEY_KP3,
-                KEY_KP4, KEY_KP5, KEY_KP6,  KEY_KP7,
-                KEY_KP8, KEY_KP9, KEY_F1,   KEY_F2,
-                KEY_F3,  KEY_F4,  KEY_F5,   KEY_F6,
-                KEY_F7,  KEY_F8,  KEY_F9,   KEY_F10,
-                KEY_F11, KEY_F12 };
+                KEY_KPASTERISK,    KEY_KPPLUS, KEY_KPCOMMA,
+                KEY_KPMINUS,       KEY_KPDOT,  KEY_KPSLASH,
+                KEY_KP0, KEY_KP1,  KEY_KP2,    KEY_KP3,
+                KEY_KP4, KEY_KP5,  KEY_KP6,    KEY_KP7,
+                KEY_KP8, KEY_KP9,  0, 0,       0, 0,
+                KEY_F1,   KEY_F2,  KEY_F3,     KEY_F4,
+                KEY_F5,   KEY_F6,  KEY_F7,     KEY_F8,
+                KEY_F9,   KEY_F10, KEY_F11,    KEY_F12 };
         scancode = map[(code & 0xFF) - 0xA0];
     } else {
         switch (code) {
