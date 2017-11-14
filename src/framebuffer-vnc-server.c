@@ -633,7 +633,7 @@ int input_finder(int max_num, const char **patterns, char **path)
 
     for (i = 0; i < max_num && device_id < 0; i++)
     {
-        snprintf(trypath, sizeof(trypath) * PATH_MAX, DEV_FMT, i);
+        snprintf(trypath, PATH_MAX, DEV_FMT, i);
 
         if ((fd = open(trypath, O_RDONLY)) < 0) {
             continue;
