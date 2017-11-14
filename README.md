@@ -19,20 +19,8 @@ Dependency:
 
 	sudo apt-get install libvncserver-dev
 
-There are 2 options: CMake or qmake
-
-Using cmake:
-
-	mkdir -p build && cd build
-	cmake ..
-	make
-	
-Using qmake:
-
-	mkdir -p build && cd build
-	qmake ../framebuffer-vncserver.pro
-	make
-
+Building:
+        ./configure && make && make install
  
 
 ### command-line help 

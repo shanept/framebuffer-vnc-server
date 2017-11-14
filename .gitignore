@@ -36,6 +36,7 @@ Makefile
 !.git*
 !.travis*
 
+# Build process
 COPYING
 INSTALL
 NEWS
@@ -44,3 +45,5 @@ AUTHORS
 ChangeLog
 aclocal.m4
 autom4te.cache
+vnc_server
+config.*
