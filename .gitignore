@@ -20,8 +20,8 @@
 moc_*.cpp
 qrc_*.cpp
 ui_*.h
-Makefile*
-*-build-*
+Makefile
+*build-*
 
 # QtCreator
 
@@ -35,3 +35,12 @@ Makefile*
 .*
 !.git*
 !.travis*
+
+COPYING
+INSTALL
+NEWS
+README
+AUTHORS
+ChangeLog
+aclocal.m4
+autom4te.cache
