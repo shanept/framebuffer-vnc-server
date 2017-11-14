@@ -686,7 +686,8 @@ void input_search(void)
 
 void print_usage(char **argv)
 {
-    fprintf(stdout, "%s [-f device] [-k device] [-m device] [-p port] [-v|-vv] [-h]\n"
+    fprintf(stdout, "Framebuffer VNC Server:     %s (%s)\n\n"
+                    "%s [-f device] [-k device] [-m device] [-p port] [-v|-vv] [-h]\n"
                     "-p port: VNC port, default is 5900\n"
                     "-f device: framebuffer device node, default is /dev/fb0\n"
                     "-k device: keyboard device node\n"
@@ -694,7 +695,7 @@ void print_usage(char **argv)
                     "-v : Verbose output, errors only (to stderr stream)\n"
                     "-vv : Very verbose output, errors and debugging (to stderr stream)\n"
                     "-h : print this help\n"
-            , *argv);
+            , GIT_BRANCH, GIT_COMMIT_HASH, *argv);
 }
 
 int main(int argc, char **argv)
