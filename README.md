@@ -30,5 +30,9 @@ Building:
 	framebuffer-vncserver [-f device] [-p port] [-h]
 	-p port: VNC port, default is 5900
 	-f device: framebuffer device node, default is /dev/fb0
+	-k device: keyboard device node
+	-m device: mouse device node
+	-v : Verbose output, errors only (to stderr stream)
+	-vv : Very verbose output, errors and debugging (to stderr stream)
 	-h : print this help
  
